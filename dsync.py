@@ -51,7 +51,6 @@ class hxe_hook_t(Hexrays_Hooks):
         self.arranging = True
         try:
             wlist = []
-
             for ch in range(ord("A"), ord("Z")):
                 wname = "Pseudocode-" + chr(ch)
                 if idaapi.find_widget(wname):
@@ -89,14 +88,15 @@ class hxe_hook_t(Hexrays_Hooks):
                 lines = []
                 for ea in item_ea_list:
                     disasm_line = generate_disasm_line(ea, 0)
-                    addr = "0x%x: " % ea
+                    if disasm_line:
+                        addr = "0x%x: " % ea
 
-                    if cur_item_ea == ea:
-                        prefix = COLSTR("==> %s" % addr, SCOLOR_INSN)
-                    else:
-                        prefix = "    " + addr
+                        if cur_item_ea == ea:
+                            prefix = COLSTR("==> %s" % addr, SCOLOR_INSN)
+                        else:
+                            prefix = "    " + addr
 
-                    lines.append(prefix+disasm_line)
+                        lines.append(prefix + disasm_line)
 
                 lines.append("")
                 lines.append(self.n_spaces * "-")
@@ -176,8 +176,21 @@ class hxe_hook_t(Hexrays_Hooks):
         tag = COLOR_ON + chr(COLOR_ADDR)
         pos = line.find(tag)
         while pos != -1 and len(line[pos+len(tag):]) >= COLOR_ADDR_SIZE:
-            item_idx = line[pos+len(tag):pos+len(tag)+COLOR_ADDR_SIZE]
-            indexes.append(int(item_idx, 16))
+            addr = line[pos+len(tag):pos+len(tag)+COLOR_ADDR_SIZE]
+            idx = int(addr, 16)
+            a = ctree_anchor_t()
+            a.value = idx
+            if a.is_valid_anchor() and a.is_citem_anchor():
+                """
+                print "a.value %s %d lvar %s citem %s itp %s blkcmt %s" % (
+                    a.is_valid_anchor(),
+                    a.get_index(),
+                    a.is_lvar_anchor(),
+                    a.is_citem_anchor(),
+                    a.is_itp_anchor(),
+                    a.is_blkcmt_anchor())
+                """
+                indexes.append(a.get_index())
             pos = line.find(tag, pos+len(tag)+COLOR_ADDR_SIZE)
         return indexes
 
@@ -206,19 +219,8 @@ class hxe_hook_t(Hexrays_Hooks):
         return None
 
 # -----------------------------------------------------------------------
-def is_ida_version(requested):
-    rv = requested.split(".")
-    kv = get_kernel_version().split(".")
-
-    count = min(len(rv), len(kv))
-    if not count:
-        return False
-
-    for i in xrange(count):
-        if int(kv[i]) < int(rv[i]):
-            return False
-    return True
-
+def is_ida_version(min_ver_required):
+    return IDA_SDK_VERSION >= min_ver_required
 
 # -----------------------------------------------------------------------
 class Dsync(ida_idaapi.plugin_t):
@@ -230,12 +232,12 @@ class Dsync(ida_idaapi.plugin_t):
     hxehook = None
 
     def init(self):
-        required_ver = "7.2"
+        required_ver = 720
         if not is_ida_version(required_ver) or not init_hexrays_plugin():
-            msg("[!] '%s' is inactive (IDA v%s and decompiler required).\n" % (Dsync.wanted_name, required_ver))
+            msg("[!] '%s' is inactive (IDA v%d and decompiler required).\n" % (Dsync.wanted_name, required_ver))
             return PLUGIN_SKIP
 
-        msg("[+] '%s' loaded. %s activates/deactivates synchronization.\n" % (Dsync.wanted_name, Dsync.wanted_hotkey))
+        msg("[%s] loaded. %s activates/deactivates synchronization.\n" % (Dsync.wanted_name, Dsync.wanted_hotkey))
         return PLUGIN_KEEP
 
     def run(self, arg):
@@ -247,11 +249,11 @@ class Dsync(ida_idaapi.plugin_t):
             Dsync.hxehook.cleanup()
             Dsync.hxehook = None
 
-        msg("[+] %s is %sabled now.\n" % (Dsync.wanted_name, "en" if Dsync.hxehook else "dis"))
-        msg("[+] %s hotkey is %s\n" % (Dsync.wanted_name, Dsync.wanted_hotkey))
+        msg("[%s] is %sabled now.\n" % (Dsync.wanted_name, "en" if Dsync.hxehook else "dis"))
+        msg("[%s] hotkey is %s\n" % (Dsync.wanted_name, Dsync.wanted_hotkey))
 
     def term(self):
-        msg("[+] %s unloaded.\n" % (Dsync.wanted_name))
+        msg("[%s] unloaded.\n" % (Dsync.wanted_name))
         if Dsync.hxehook:
             Dsync.hxehook.unhook()
             Dsync.hxehook.cleanup()
